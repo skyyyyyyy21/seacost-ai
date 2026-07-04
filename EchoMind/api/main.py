@@ -53,8 +53,6 @@ _evaluator    = None
 
 def _anthropic_cfg() -> Dict[str, Any]:
     key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not key:
-        raise RuntimeError("未设置 ANTHROPIC_API_KEY")
     cfg: Dict[str, Any] = {
         "api_key":  key,
         "model":    os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
@@ -62,6 +60,9 @@ def _anthropic_cfg() -> Dict[str, Any]:
     base_url = os.getenv("ANTHROPIC_BASE_URL", "").strip()
     if base_url:
         cfg["base_url"] = base_url
+    # 如果没有 API Key，返回 None 表示降级模式
+    if not key:
+        return None
     return cfg
 
 
@@ -80,7 +81,16 @@ async def lifespan(app: FastAPI):
     from monitor.performance_monitor import PerformanceMonitor
 
     cfg = _anthropic_cfg()
-    logger.info(f"模型: {cfg['model']}  base_url: {cfg.get('base_url', '(官方)')}")
+    
+    # 降级模式：没有 API Key 时，使用默认值
+    if cfg is None:
+        logger.warning("未设置 ANTHROPIC_API_KEY，进入降级模式（LLM 功能不可用）")
+        cfg = {
+            "api_key": "dummy-key",
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
+        }
+    else:
+        logger.info(f"模型: {cfg['model']}  base_url: {cfg.get('base_url', '(官方)')}")
 
     # 意图识别器（Orchestrator 内部也会创建，这里单独暴露给 Evaluator）
     recognizer = IntentRecognizer(
