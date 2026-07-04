@@ -99,22 +99,34 @@ class MemoryManager:
 
         self._redis = redis.from_url(redis_url, decode_responses=True)
 
-        # ChromaDB：优先连接独立服务（docker compose 模式），连不上则降级为本地嵌入式
+        # ChromaDB：优先连接独立服务（docker compose 模式），连不上则降级为本地嵌入式，再失败则纯内存模式
+        self._chroma = None
+        self._episodic = None
+        self._profile = None
         try:
             chroma = chromadb.HttpClient(host=chroma_host, port=chroma_port)
             chroma.heartbeat()  # 测试连接
             logger.info(f"ChromaDB 已连接: {chroma_host}:{chroma_port}")
-        except Exception:
-            logger.info(f"ChromaDB 服务不可用，使用本地嵌入式模式: {chroma_path}")
-            chroma = chromadb.PersistentClient(
-                path=chroma_path,
-                settings=chromadb.Settings(anonymized_telemetry=False),
-            )
+            self._chroma = chroma
+        except Exception as e:
+            logger.info(f"ChromaDB 服务不可用 ({e})，尝试本地嵌入式模式: {chroma_path}")
+            try:
+                import os
+                os.makedirs(chroma_path, exist_ok=True)
+                chroma = chromadb.PersistentClient(
+                    path=chroma_path,
+                    settings=chromadb.Settings(anonymized_telemetry=False),
+                )
+                self._chroma = chroma
+                logger.info(f"ChromaDB 本地模式已初始化: {chroma_path}")
+            except Exception as e2:
+                logger.warning(f"ChromaDB 本地模式也不可用 ({e2})，使用纯内存模式（重启后数据丢失）")
 
-        # 情景记忆：存储历史对话片段
-        self._episodic = chroma.get_or_create_collection("episodic")
-        # 用户画像：存储提炼出的偏好和实体
-        self._profile  = chroma.get_or_create_collection("user_profile")
+        if self._chroma:
+            # 情景记忆：存储历史对话片段
+            self._episodic = self._chroma.get_or_create_collection("episodic")
+            # 用户画像：存储提炼出的偏好和实体
+            self._profile = self._chroma.get_or_create_collection("user_profile")
 
     # ── 写入 ──────────────────────────────────────────────────────────────────
 
@@ -154,6 +166,8 @@ class MemoryManager:
         从当前工作记忆中提炼用户偏好，更新用户画像。
         用 LLM 提炼偏好，然后存入 ChromaDB（ChromaDB 内置 embedding，不依赖外部 API）。
         """
+        if self._profile is None:
+            return
         user_id = self._safe_text(user_id)
         conv_id = self._safe_text(conv_id)
         messages = await self._get_working_memory(user_id, conv_id)
@@ -297,6 +311,8 @@ class MemoryManager:
         query_text = self._safe_text(query).strip()
         if not query_text:
             return []
+        if self._episodic is None:
+            return []
         try:
             # 直接传 query_texts，ChromaDB 内置模型自动生成向量做匹配
             results = self._episodic.query(
@@ -312,6 +328,8 @@ class MemoryManager:
 
     async def _store_episodic(self, user_id: str, conv_id: str, text: str, summary: str) -> None:
         """将压缩后的对话片段存入情景记忆。ChromaDB 内置 embedding，不依赖外部 API。"""
+        if self._episodic is None:
+            return
         try:
             user_id = self._safe_text(user_id)
             conv_id = self._safe_text(conv_id)
@@ -330,6 +348,8 @@ class MemoryManager:
 
     async def _get_profile(self, user_id: str) -> Dict[str, Any]:
         """获取用户画像（取最新一条）。"""
+        if self._profile is None:
+            return {}
         try:
             results = self._profile.get(where={"user_id": user_id}, limit=1)
             if results["documents"]:

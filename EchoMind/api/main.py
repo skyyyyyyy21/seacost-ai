@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
         redis_url=os.getenv("REDIS_URL", "redis://redis:6379/0"),
         chroma_host=os.getenv("CHROMA_HOST", "chromadb"),
         chroma_port=int(os.getenv("CHROMA_PORT", "8000")),
-        chroma_path=os.getenv("CHROMA_PERSIST_DIRECTORY", "/app/data/chroma"),
+        chroma_path=os.getenv("CHROMA_PERSIST_DIRECTORY", "./data/chroma"),
         api_key=cfg["api_key"],
         base_url=cfg.get("base_url"),
         model=cfg["model"],
@@ -126,7 +126,7 @@ async def lifespan(app: FastAPI):
     kb = KnowledgeBase(
         chroma_host=os.getenv("CHROMA_HOST", "chromadb"),
         chroma_port=int(os.getenv("CHROMA_PORT", "8000")),
-        chroma_path=os.getenv("CHROMA_PERSIST_DIRECTORY", "/app/data/chroma"),
+        chroma_path=os.getenv("CHROMA_PERSIST_DIRECTORY", "./data/chroma"),
     )
     logger.info(f"知识库已加载: {kb.doc_count} 个文档片段")
 
