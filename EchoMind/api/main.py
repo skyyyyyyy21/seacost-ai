@@ -77,6 +77,12 @@ async def lifespan(app: FastAPI):
 
     print(BANNER, flush=True)
 
+    # 初始化统一 LLM 客户端
+    from core.llm_client import init_llm_client, is_llm_available
+    llm_ok = init_llm_client()
+    if not llm_ok:
+        logger.warning("LLM 初始化失败，进入降级模式")
+
     from agents.agent_orchestrator import AgentOrchestrator, Request
     from core.intent_recognizer import IntentRecognizer
     from evaluation.evaluator import EndToEndEvaluator
@@ -85,31 +91,11 @@ async def lifespan(app: FastAPI):
     from memory.conversation_memory import MemoryManager
     from monitor.performance_monitor import PerformanceMonitor
 
-    cfg = _anthropic_cfg()
-    
-    # 降级模式：没有 API Key 时，使用默认值
-    if cfg is None:
-        logger.warning("未设置 ANTHROPIC_API_KEY，进入降级模式（LLM 功能不可用）")
-        cfg = {
-            "api_key": "dummy-key",
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
-        }
-    else:
-        logger.info(f"模型: {cfg['model']}  base_url: {cfg.get('base_url', '(官方)')}")
-
     # 意图识别器（Orchestrator 内部也会创建，这里单独暴露给 Evaluator）
-    recognizer = IntentRecognizer(
-        api_key=cfg["api_key"],
-        base_url=cfg.get("base_url"),
-        model=cfg["model"],
-    )
+    recognizer = IntentRecognizer()
 
     # Agent 编排器
-    _orchestrator = AgentOrchestrator(
-        api_key=cfg["api_key"],
-        base_url=cfg.get("base_url"),
-        model=cfg["model"],
-    )
+    _orchestrator = AgentOrchestrator()
 
     # 记忆管理器（Redis 工作记忆 + ChromaDB 情景记忆/用户画像）
     _memory = MemoryManager(
@@ -117,17 +103,10 @@ async def lifespan(app: FastAPI):
         chroma_host=os.getenv("CHROMA_HOST", "chromadb"),
         chroma_port=int(os.getenv("CHROMA_PORT", "8000")),
         chroma_path=os.getenv("CHROMA_PERSIST_DIRECTORY", "./data/chroma"),
-        api_key=cfg["api_key"],
-        base_url=cfg.get("base_url"),
-        model=cfg["model"],
     )
 
     # MCP 工具管理器 + RAG 知识库（基于 ChromaDB 的真实检索）
-    _tool_manager = MCPToolManager(
-        api_key=cfg["api_key"],
-        base_url=cfg.get("base_url"),
-        model=cfg["model"],
-    )
+    _tool_manager = MCPToolManager()
     kb = KnowledgeBase(
         chroma_host=os.getenv("CHROMA_HOST", "chromadb"),
         chroma_port=int(os.getenv("CHROMA_PORT", "8000")),

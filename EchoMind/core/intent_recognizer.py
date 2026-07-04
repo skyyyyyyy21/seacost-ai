@@ -18,8 +18,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from anthropic import AsyncAnthropic
-
 logger = logging.getLogger(__name__)
 
 
@@ -84,26 +82,16 @@ class IntentRecognizer:
     """
     端到端意图识别器。
 
-    初始化时不加载任何本地模型，所有 AI 能力通过 Anthropic API 调用。
+    初始化时不加载任何本地模型，所有 AI 能力通过统一 LLM 客户端调用。
     模板 Embedding 在首次请求时懒加载并缓存，后续复用。
     """
 
     def __init__(
         self,
-        api_key: str,
-        base_url: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20241022",
         confidence_threshold: float = 0.5,
     ):
-        kwargs: Dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        self.client    = AsyncAnthropic(**kwargs)
-        self.model     = model
         self.threshold = confidence_threshold
-        # 第三方兼容 API（如 DeepSeek）通常不支持 Embedding，禁用该策略。
-        # 官方 Anthropic SDK 当前没有 embeddings 资源，因此下面会使用稳定的
-        # 本地字符 n-gram 向量作为轻量兜底，保证三路融合链路真实可跑。
+        # 使用本地字符 n-gram 向量作为轻量兜底
         self._embedding_enabled = not bool(base_url)
 
         self._tpl_embeddings: Dict[IntentCategory, List[List[float]]] = {}
@@ -208,13 +196,12 @@ class IntentRecognizer:
         prompt = self._clean_text(prompt)
 
         try:
-            resp = await self.client.messages.create(
-                model=self.model,
-                max_tokens=256,
-                temperature=0.1,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = resp.content[0].text
+            from core.llm_client import chat_completion, is_llm_available
+            if not is_llm_available():
+                return {"intent": IntentCategory.OTHER, "confidence": 0.0, "reasoning": "LLM 不可用", "failed": True}
+            
+            messages = [{"role": "user", "content": prompt}]
+            raw = await chat_completion(messages, temperature=0.1, max_tokens=256)
             s, e = raw.find("{"), raw.rfind("}") + 1
             data = json.loads(raw[s:e])
             try:
