@@ -90,14 +90,14 @@ class LLMJudge:
     注意：LLM Judge 本身也有偏差，建议定期用人工标注校准。
     """
 
-    JUDGE_PROMPT = """你是一个客服质量评估专家。请对以下客服响应进行评分。
+    JUDGE_PROMPT = """你是一个餐饮成本管控系统质量评估专家。请对以下 AI 助手响应进行评分。
 
 用户问题: {question}
 Agent 响应: {response}
 {context_section}
 
 请从以下四个维度评分（0.0-1.0），返回 JSON：
-- relevance: 响应是否直接针对用户问题（0=完全无关，1=完全相关）
+- relevance: 响应是否直接针对用户的采购/库存/成本问题（0=完全无关，1=完全相关）
 - accuracy: 信息是否准确无误（0=明显错误，1=完全正确）
 - completeness: 是否完整解决了用户需求（0=完全没解决，1=完全解决）
 - helpfulness: 用户能否据此采取行动（0=毫无帮助，1=非常有帮助）
@@ -477,20 +477,24 @@ class EndToEndEvaluator:
 # ── 内置测试用例（开箱即用）──────────────────────────────────────────────────
 
 DEFAULT_INTENT_CASES: List[IntentTestCase] = [
-    IntentTestCase("我的订单什么时候到？",       "query"),
-    IntentTestCase("帮我取消订单",               "request"),
-    IntentTestCase("你们服务太差了！",            "complaint"),
-    IntentTestCase("应用一直报500错误",           "technical"),
-    IntentTestCase("为什么扣了两次款？",          "billing"),
-    IntentTestCase("我要投诉，转人工！",          "escalation"),
-    IntentTestCase("你好",                        "greeting"),
-    IntentTestCase("修改我的邮箱地址",            "account"),
+    IntentTestCase("今天需要报货龙虾50斤",           "purchase"),
+    IntentTestCase("生成明天的采购建议",             "purchase"),
+    IntentTestCase("验收对虾入库",                  "inspection"),
+    IntentTestCase("称重数据同步异常",               "inspection"),
+    IntentTestCase("查看当前库存",                  "inventory"),
+    IntentTestCase("临期食材提醒",                  "inventory"),
+    IntentTestCase("计算龙虾菜品成本",               "cost"),
+    IntentTestCase("本月毛利分析",                  "cost"),
+    IntentTestCase("今天采购了多少海鲜",             "query"),
+    IntentTestCase("损耗太高了，怎么控制",            "complaint"),
+    IntentTestCase("转人工处理紧急问题",              "escalation"),
+    IntentTestCase("早上好",                        "greeting"),
 ]
 
 DEFAULT_DIALOG_CASES: List[Dict[str, Any]] = [
-    {"question": "我的订单 #12345 还没到，已经超时了"},
-    {"question": "应用登录一直报错 401"},
-    {"question": "为什么这个月多扣了 50 块钱？"},
-    {"question": "帮我把收货地址改成北京市朝阳区"},
-    {"turns": ["你好，我想退款", "订单号是 #12345", "退款多久能到账？"]},
+    {"question": "今天需要报货龙虾，大概要多少？"},
+    {"question": "验收时发现对虾重量偏差超过5%怎么办？"},
+    {"question": "查看海鲜区当前库存"},
+    {"question": "龙虾菜品的成本是多少？毛利怎么样？"},
+    {"turns": ["你好，我想了解一下采购流程", "如何生成采购建议？", "供应商比价怎么操作？"]},
 ]

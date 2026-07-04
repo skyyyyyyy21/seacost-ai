@@ -1,9 +1,13 @@
 [project]
 requires = ["python-3.12"]
-project_type = ""
+project_type = "web"
 
 [preview]
-preview_enable = "disabled"
+preview_enable = "enabled"
+
+[dev]
+build = ["bash", "EchoMind/scripts/coze-preview-build.sh"]
+run = ["bash", "EchoMind/scripts/coze-preview-run.sh"]
 
 [deploy]
 build = ["bash", "EchoMind/scripts/setup.sh"]

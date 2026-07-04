@@ -35,12 +35,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BANNER = r"""
-    ʕ•ᴥ•ʔ  ʕ•ᴥ•ʔ  ʕ•ᴥ•ʔ
-   ╔══════════════════════╗
-   ║   EchoMind  v2.0     ║
-   ║   智能客服 AI 系统    ║
-   ╚══════════════════════╝
-    ʕ•ᴥ•ʔ  ʕ•ᴥ•ʔ  ʕ•ᴥ•ʔ
+    ~*~  ~*~  ~*~
+   ╔══════════════════════════════╗
+   ║  SeaCost AI  v2.0            ║
+   ║  海鲜酒楼全链路成本管控系统   ║
+   ╚══════════════════════════════╝
+    ~*~  ~*~  ~*~
 """
 
 # ── 全局组件（lifespan 中初始化）─────────────────────────────────────────────
@@ -168,16 +168,16 @@ async def lifespan(app: FastAPI):
         baseline_path=os.getenv("EVAL_BASELINE_PATH", "/app/data/eval/baseline.json"),
     )
 
-    logger.info("EchoMind 已就绪")
+    logger.info("SeaCost AI 已就绪")
     yield
 
     await _monitor.stop()
-    logger.info("EchoMind 已关闭")
+    logger.info("SeaCost AI 已关闭")
 
 
 # ── FastAPI ───────────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="EchoMind 智能客服",
+    title="SeaCost AI - 海鲜酒楼全链路成本管控系统",
     version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -320,11 +320,28 @@ def _should_use_knowledge(message: str) -> bool:
     if msg in greetings:
         return False
     business_keywords = [
-        "退款", "订单", "物流", "配送", "发票", "扣款", "支付", "账单", "订阅",
-        "登录", "报错", "错误", "崩溃", "会员", "积分", "账户", "密码", "地址",
-        "refund", "order", "invoice", "payment", "error", "login",
+        "采购", "报货", "供应商", "比价", "进货", "验收", "入库", "称重",
+        "库存", "盘点", "临期", "保质期", "损耗", "成本", "毛利", "核算",
+        "利润", "报损", "龙虾", "对虾", "海鲜", "食材",
     ]
     return len(msg) >= 4 or any(kw in msg for kw in business_keywords)
+
+
+@app.get("/skills")
+async def list_skills():
+    """查看已加载的 Skills 列表。"""
+    if _orchestrator is None:
+        raise HTTPException(503, "服务未就绪")
+    return _orchestrator._skill_manager.summary()
+
+
+@app.post("/skills/reload")
+async def reload_skills():
+    """重新加载 Skills（热更新）。"""
+    if _orchestrator is None:
+        raise HTTPException(503, "服务未就绪")
+    _orchestrator._skill_manager.reload()
+    return {"message": "Skills 已重新加载", "summary": _orchestrator._skill_manager.summary()}
 
 
 @app.get("/monitor")
@@ -518,7 +535,7 @@ async def run_eval(body: Optional[EvalRunInput] = None):
 # ── 交互式 CLI ────────────────────────────────────────────────────────────────
 async def _cli():
     print(BANNER)
-    print("EchoMind CLI — 输入 quit 退出\n")
+    print("SeaCost AI CLI — 输入 quit 退出\n")
 
     from agents.agent_orchestrator import AgentOrchestrator, Request
     from memory.conversation_memory import MemoryManager, MsgRole
@@ -558,7 +575,21 @@ async def _cli():
         await mem.add_message(user_id, conv_id, MsgRole.USER, msg)
         await mem.add_message(user_id, conv_id, MsgRole.ASSISTANT, result.response)
 
-        print(f"\nEchoMind [{result.agent_type.value}]: {result.response}\n")
+        print(f"\nSeaCost AI [{result.agent_type.value}]: {result.response}\n")
+
+
+# =============================================================================
+# 静态文件服务（Dashboard）
+# =============================================================================
+from fastapi.responses import FileResponse
+
+@app.get("/")
+async def root():
+    """前端 Dashboard 入口"""
+    static_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "index.html")
+    if os.path.exists(static_path):
+        return FileResponse(static_path)
+    return {"message": "SeaCost AI - 海鲜酒楼全链路成本管控系统", "docs": "/docs"}
 
 
 if __name__ == "__main__":

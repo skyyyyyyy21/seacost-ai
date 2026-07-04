@@ -33,10 +33,11 @@ logger = logging.getLogger(__name__)
 # ── 数据结构 ──────────────────────────────────────────────────────────────────
 
 class AgentType(Enum):
-    GENERAL   = "general"    # 通用客服
-    TECHNICAL = "technical"  # 技术支持
-    BILLING   = "billing"    # 账单/退款
-    ESCALATION = "escalation" # 人工升级（占位）
+    GENERAL    = "general"     # 通用助手
+    PURCHASE   = "purchase"    # 采购报货
+    INVENTORY  = "inventory"   # 库存管理（含验收）
+    COST       = "cost"        # 成本核算
+    ESCALATION = "escalation"  # 人工升级（占位）
 
 
 @dataclass
@@ -106,6 +107,7 @@ class BaseAgent:
         self._client = client
         self._model  = model
         self.stats   = AgentStats()
+        self._skill_manager = None  # 由 Orchestrator 注入
 
     async def handle(self, req: Request) -> AgentResponse:
         t0 = time.monotonic()
@@ -134,6 +136,15 @@ class BaseAgent:
                 latency_ms=ms,
             )
 
+    def _build_system_prompt(self, message: str) -> str:
+        """构建 system prompt，注入匹配的 Skills。"""
+        base_prompt = self.system_prompt
+        if self._skill_manager:
+            skills_text = self._skill_manager.prompt_for(message, self.agent_type.value)
+            if skills_text:
+                return f"{base_prompt}\n\n{skills_text}"
+        return base_prompt
+
     async def _call_llm(self, req: Request) -> str:
         def _clean(s: str) -> str:
             return s.encode("utf-8", errors="ignore").decode("utf-8")
@@ -144,10 +155,13 @@ class BaseAgent:
             messages.append({"role": "assistant", "content": "好的，我已了解背景信息。"})
         messages.append({"role": "user", "content": _clean(req.message)})
 
+        # 构建 system prompt（含动态 Skills 注入）
+        system = self._build_system_prompt(req.message)
+
         resp = await self._client.messages.create(
             model=self._model,
             max_tokens=1024,
-            system=self.system_prompt,
+            system=system,
             messages=messages,
         )
         return resp.content[0].text
@@ -161,24 +175,34 @@ class BaseAgent:
 class GeneralAgent(BaseAgent):
     agent_type    = AgentType.GENERAL
     system_prompt = (
-        "你是 EchoMind 智能客服。友好、简洁地回答用户问题。"
-        "如果问题超出你的能力范围，明确说明并建议转接专业客服。"
+        "你是海鲜酒楼成本管控 AI 助手。友好、简洁地回答用户关于采购、库存、成本的问题。"
+        "如果问题超出你的能力范围，明确说明并建议转接专业模块处理。"
     )
 
 
-class TechnicalAgent(BaseAgent):
-    agent_type    = AgentType.TECHNICAL
+class PurchaseAgent(BaseAgent):
+    agent_type    = AgentType.PURCHASE
     system_prompt = (
-        "你是技术支持专家。专注于：故障排查、错误诊断、系统配置。"
-        "提供清晰的步骤化解决方案。遇到需要后台操作的问题，说明需要升级处理。"
+        "你是智能采购报货专家。专注于：采购建议生成、供应商比价、报货下单、价格异常预警。"
+        "基于历史销量、天气、节假日等因素提供科学的采购建议。"
+        "涉及大额采购或供应商变更时，说明需要人工确认。"
     )
 
 
-class BillingAgent(BaseAgent):
-    agent_type    = AgentType.BILLING
+class InventoryAgent(BaseAgent):
+    agent_type    = AgentType.INVENTORY
     system_prompt = (
-        "你是账单服务专家。专注于：账单查询、退款申请、发票问题、订阅管理。"
-        "对财务问题保持准确和专业。涉及实际退款操作时，说明需要人工审核。"
+        "你是库存管理专家（含验收入库）。专注于：食材验收、称重数据同步、库存盘点、"
+        "临期提醒、先进先出管理、损耗控制。"
+        "对验收差异和库存异常保持敏感，提供清晰的解决方案。"
+    )
+
+
+class CostAgent(BaseAgent):
+    agent_type    = AgentType.COST
+    system_prompt = (
+        "你是成本核算专家。专注于：菜品成本计算、毛利分析、损耗率统计、成本报表解读。"
+        "对财务数据保持准确和专业。涉及成本异常或利润下滑时，提供分析和建议。"
     )
 
 
@@ -196,9 +220,10 @@ class AgentOrchestrator:
 
     # 意图 → Agent 类型的静态映射（路由表）
     _INTENT_ROUTING: Dict[IntentCategory, AgentType] = {
-        IntentCategory.TECHNICAL:  AgentType.TECHNICAL,
-        IntentCategory.BILLING:    AgentType.BILLING,
-        IntentCategory.ACCOUNT:    AgentType.BILLING,
+        IntentCategory.PURCHASE:   AgentType.PURCHASE,
+        IntentCategory.INSPECTION: AgentType.INVENTORY,
+        IntentCategory.INVENTORY:  AgentType.INVENTORY,
+        IntentCategory.COST:       AgentType.COST,
         IntentCategory.ESCALATION: AgentType.ESCALATION,
         # 其余意图 → GENERAL（默认）
     }
@@ -216,12 +241,22 @@ class AgentOrchestrator:
 
         self._intent_recognizer = IntentRecognizer(api_key=api_key, base_url=base_url, model=model)
 
+        # 加载 Skills 管理器
+        from core.skill_loader import SkillManager
+        self._skill_manager = SkillManager()
+
         # Agent 池：每种类型可有多个实例（水平扩展）
         self._pool: Dict[AgentType, List[BaseAgent]] = {
             AgentType.GENERAL:   [GeneralAgent(client, model)],
-            AgentType.TECHNICAL: [TechnicalAgent(client, model)],
-            AgentType.BILLING:   [BillingAgent(client, model)],
+            AgentType.PURCHASE:  [PurchaseAgent(client, model)],
+            AgentType.INVENTORY: [InventoryAgent(client, model)],
+            AgentType.COST:      [CostAgent(client, model)],
         }
+
+        # 为所有 Agent 注入 SkillManager
+        for agents in self._pool.values():
+            for agent in agents:
+                agent._skill_manager = self._skill_manager
 
     # ── 主入口 ────────────────────────────────────────────────────────────────
 
@@ -317,18 +352,21 @@ class AgentOrchestrator:
         判断是否需要多个 Agent 并行协作。
 
         意图识别通常只返回一个主意图；这里用领域关键词补充检测复合问题，
-        例如"登录报错且被重复扣款"需要技术和账单 Agent 同时处理。
+        例如"龙虾验收重量不对而且成本核算有误"需要库存和成本 Agent 同时处理。
         """
         msg = req.message.lower()
         targets: List[AgentType] = []
 
-        technical_kws = ["崩溃", "报错", "error", "crash", "无法登录", "登录失败", "500", "401"]
-        billing_kws = ["退款", "扣款", "发票", "账单", "支付", "订阅", "refund", "invoice"]
+        purchase_kws = ["采购", "报货", "供应商", "比价", "下单", "进货", "报价"]
+        inventory_kws = ["验收", "入库", "库存", "盘点", "称重", "临期", "损耗", "保质期"]
+        cost_kws = ["成本", "毛利", "核算", "利润", "报损", "费用"]
 
-        if req.intent == IntentCategory.TECHNICAL or any(kw in msg for kw in technical_kws):
-            targets.append(AgentType.TECHNICAL)
-        if req.intent in (IntentCategory.BILLING, IntentCategory.ACCOUNT) or any(kw in msg for kw in billing_kws):
-            targets.append(AgentType.BILLING)
+        if req.intent == IntentCategory.PURCHASE or any(kw in msg for kw in purchase_kws):
+            targets.append(AgentType.PURCHASE)
+        if req.intent in (IntentCategory.INSPECTION, IntentCategory.INVENTORY) or any(kw in msg for kw in inventory_kws):
+            targets.append(AgentType.INVENTORY)
+        if req.intent == IntentCategory.COST or any(kw in msg for kw in cost_kws):
+            targets.append(AgentType.COST)
 
         # 保持顺序去重，并只返回当前有实例的 Agent 类型。
         deduped = list(dict.fromkeys(targets))

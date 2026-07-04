@@ -2,10 +2,14 @@
 sub_id = "7aab5543"
 name = "EchoMind"
 requires = ["python-3.12"]
-project_type = ""
+project_type = "web"
 
 [preview]
-preview_enable = "disabled"
+preview_enable = "enabled"
+
+[dev]
+build = ["bash", "scripts/coze-preview-build.sh"]
+run = ["bash", "scripts/coze-preview-run.sh"]
 
 [deploy]
 build = ["bash", "scripts/setup.sh"]

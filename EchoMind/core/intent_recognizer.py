@@ -54,15 +54,14 @@ class IntentResult:
 
 # ── Few-shot 模板（同时用于 LLM 示例和 Embedding 匹配）────────────────────────
 _TEMPLATES: Dict[IntentCategory, List[str]] = {
-    IntentCategory.QUERY:      ["我的订单状态是什么？", "如何重置密码？", "快递什么时候到？"],
-    IntentCategory.COMPLAINT:  ["等了好几个小时！", "服务太差了！", "一直没人处理！"],
-    IntentCategory.REQUEST:    ["帮我取消订单", "我需要修改地址", "请协助退款"],
-    IntentCategory.GREETING:   ["你好", "嗨，有人吗", "早上好"],
-    IntentCategory.ESCALATION: ["我要投诉！", "转人工客服", "找你们经理"],
-    IntentCategory.TECHNICAL:  ["应用一直崩溃", "无法登录", "出现500错误"],
-    IntentCategory.BILLING:    ["为什么扣了两次款？", "申请退款", "发票问题"],
-    IntentCategory.ACCOUNT:    ["修改邮箱", "注销账户", "更新个人信息"],
-    IntentCategory.FEEDBACK:   ["服务很棒！", "非常满意", "给个好评"],
+    IntentCategory.PURCHASE:   ["今天需要报货龙虾50斤", "生成采购建议", "供应商报价多少", "比价下单"],
+    IntentCategory.INSPECTION: ["验收入库对虾", "称重数据同步", "拍照留证", "重量偏差超标"],
+    IntentCategory.INVENTORY:  ["查看库存", "临期食材提醒", "盘点差异", "先进先出"],
+    IntentCategory.COST:       ["计算成本", "毛利分析", "成本核算", "损耗率多少"],
+    IntentCategory.QUERY:      ["今天采购了多少", "库存还有多少", "供应商联系方式", "报表导出"],
+    IntentCategory.COMPLAINT:  ["损耗太高了", "供应商以次充好", "系统又报错了", "数据不对"],
+    IntentCategory.ESCALATION: ["转人工处理", "找经理", "投诉供应商", "紧急问题"],
+    IntentCategory.GREETING:   ["你好", "早上好", "开始工作"],
 }
 
 # 紧急关键词
@@ -248,14 +247,14 @@ class IntentRecognizer:
         """策略 3：关键词模式匹配（同步，零延迟兜底）。"""
         msg = message.lower()
         patterns = {
-            IntentCategory.ESCALATION: ["投诉", "经理", "转人工", "supervisor"],
-            IntentCategory.COMPLAINT:  ["太差", "糟糕", "horrible", "等了很久"],
-            IntentCategory.QUERY:      ["?", "？", "怎么", "什么", "status"],
-            IntentCategory.REQUEST:    ["帮我", "需要", "please", "help"],
-            IntentCategory.GREETING:   ["你好", "嗨", "hello", "hi"],
-            IntentCategory.BILLING:    ["退款", "扣款", "发票", "refund"],
-            IntentCategory.TECHNICAL:  ["崩溃", "报错", "error", "crash"],
-            IntentCategory.ACCOUNT:    ["密码", "邮箱", "账户", "password"],
+            IntentCategory.PURCHASE:   ["报货", "采购", "供应商", "比价", "下单", "进货"],
+            IntentCategory.INSPECTION: ["验收", "入库", "称重", "拍照", "偏差", "退货"],
+            IntentCategory.INVENTORY:  ["库存", "盘点", "临期", "保质期", "先进先出", "损耗"],
+            IntentCategory.COST:       ["成本", "毛利", "核算", "利润", "报损"],
+            IntentCategory.ESCALATION: ["投诉", "经理", "转人工", "紧急"],
+            IntentCategory.COMPLAINT:  ["太高", "太差", "报错", "不对", "以次充好"],
+            IntentCategory.QUERY:      ["?", "？", "多少", "什么", "怎么", "查看", "查询"],
+            IntentCategory.GREETING:   ["你好", "嗨", "早上好"],
         }
         best_cat, best_score = IntentCategory.OTHER, 0.0
         for cat, kws in patterns.items():
@@ -293,11 +292,11 @@ class IntentRecognizer:
     # ── 实体提取 ──────────────────────────────────────────────────────────────
 
     async def _extract_entities(self, message: str) -> Dict[str, List[str]]:
-        """用 LLM 从消息中提取结构化实体。"""
+        """用 LLM 从消息中提取结构化实体（餐饮场景）。"""
         message = self._clean_text(message)
-        prompt = f"""从客服消息中提取实体，返回 JSON（字段值为列表，没有则为空列表）:
+        prompt = f"""从餐饮成本管控消息中提取实体，返回 JSON（字段值为列表，没有则为空列表）:
 消息: "{message}"
-格式: {{"order_id":[],"product":[],"date":[],"amount":[],"error_code":[]}}"""
+格式: {{"ingredient":[],"supplier":[],"batch":[],"weight":[],"price":[],"date":[]}}"""
         prompt = self._clean_text(prompt)
         try:
             resp = await self.client.messages.create(
@@ -308,7 +307,7 @@ class IntentRecognizer:
             s, e = raw.find("{"), raw.rfind("}") + 1
             return json.loads(raw[s:e])
         except Exception:
-            return {"order_id": [], "product": [], "date": [], "amount": [], "error_code": []}
+            return {"ingredient": [], "supplier": [], "batch": [], "weight": [], "price": [], "date": []}
 
     # ── 辅助 ──────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeaCost AI - 海鲜酒楼全链路成本管控系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            padding: 40px 0;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .tab {
+            padding: 12px 30px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 25px;
+            color: white;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .panel {
+            display: none;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        /* 架构面板 */
+        .architecture {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .arch-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            padding: 25px;
+            transition: transform 0.3s;
+        }
+
+        .arch-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .arch-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .arch-card ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .arch-card li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .arch-card li:last-child {
+            border-bottom: none;
+        }
+
+        .arch-card li:before {
+            content: "✓ ";
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        /* 对话面板 */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-meta {
+            font-size: 0.75em;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input input:focus {
+            border-color: #667eea;
+        }
+
+        .chat-input button {
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .chat-input button:hover {
+            background: #5568d3;
+        }
+
+        .chat-input button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* 监控面板 */
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .monitor-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .monitor-card h4 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .monitor-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+
+        .monitor-card .label {
+            font-size: 0.85em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .agent-stats {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .agent-stats h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .agent-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .agent-name {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .agent-metrics {
+            display: flex;
+            gap: 20px;
+        }
+
+        .metric {
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .metric-label {
+            font-size: 0.75em;
+            color: #666;
+        }
+
+        /* 知识库面板 */
+        .knowledge-section {
+            margin-bottom: 30px;
+        }
+
+        .knowledge-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            background: #f8f9fa;
+        }
+
+        .upload-area p {
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .knowledge-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+
+        .stat-card .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        /* 评测面板 */
+        .eval-results {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .eval-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .eval-header h3 {
+            color: #333;
+        }
+
+        .eval-btn {
+            padding: 10px 25px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.3s;
+        }
+
+        .eval-btn:hover {
+            background: #45a049;
+        }
+
+        .eval-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .eval-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .eval-metric {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .eval-metric .value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .eval-metric .label {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .eval-progress {
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .eval-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 100%);
+            transition: width 0.5s;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .loading:after {
+            content: '';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SeaCost AI</h1>
+            <p>海鲜酒楼全链路成本管控系统</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-panel="architecture">系统架构</button>
+            <button class="tab" data-panel="chat">对话演示</button>
+            <button class="tab" data-panel="monitor">实时监控</button>
+            <button class="tab" data-panel="knowledge">知识库</button>
+            <button class="tab" data-panel="eval">评测系统</button>
+        </div>
+
+        <!-- 系统架构面板 -->
+        <div class="panel active" id="architecture">
+            <h2 style="margin-bottom: 25px; color: #333;">七大核心技术亮点</h2>
+            <div class="architecture">
+                <div class="arch-card">
+                    <h3>1. 三路融合意图识别</h3>
+                    <ul>
+                        <li>LLM 语义理解（权重 70%）</li>
+                        <li>Embedding 向量相似度（权重 20%）</li>
+                        <li>关键词模式匹配（权重 10%）</li>
+                        <li>加权投票合并结果</li>
+                        <li>支持 8 种餐饮意图类型</li>
+                    </ul>
+                </div>
+                <div class="arch-card">
+                    <h3>2. MCP 工具调用 + RAG</h3>
+                    <ul>
+                        <li>查询改写（Query Rewriting）</li>
+                        <li>并行召回 ChromaDB</li>
+                        <li>LLM 重排（Reranking）</li>
+                        <li>熔断器 + TTL 缓存</li>
+                        <li>降级策略（Fallback）</li>
+                    </ul>
+                </div>
+                <div class="arch-card">
+                    <h3>3. 三级记忆管理</h3>
+                    <ul>
+                        <li>工作记忆：Redis（最近 20 条）</li>
+                        <li>情景记忆：ChromaDB（对话摘要）</li>
+                        <li>用户画像：ChromaDB（偏好提炼）</li>
+                        <li>自动压缩（15 条触发）</li>
+                        <li>异步更新用户画像</li>
+                    </ul>
+                </div>
+                <div class="arch-card">
+                    <h3>4. 多 Agent 路由编排</h3>
+                    <ul>
+                        <li>采购 Agent（智能报货）</li>
+                        <li>库存 Agent（验收管理）</li>
+                        <li>成本 Agent（核算分析）</li>
+                        <li>三层路由决策</li>
+                        <li>自动并行协作</li>
+                    </ul>
+                </div>
+                <div class="arch-card">
+                    <h3>5. 动态 Skills 注入</h3>
+                    <ul>
+                        <li>Markdown 格式 SOP 文档</li>
+                        <li>按 Agent 类型匹配注入</li>
+                        <li>关键词触发规则</li>
+                        <li>热加载无需重启</li>
+                        <li>长度预算控制</li>
+                    </ul>
+                </div>
+                <div class="arch-card">
+                    <h3>6. Monitor 闭环监控</h3>
+                    <ul>
+                        <li>实时采集 Agent/Tool 指标</li>
+                        <li>Z-score 异常检测</li>
+                        <li>自动降权（routing_penalty）</li>
+                        <li>Prometheus 指标暴露</li>
+                        <li>Webhook 告警</li>
+                    </ul>
+                </div>
+                <div class="arch-card">
+                    <h3>7. 端到端评测</h3>
+                    <ul>
+                        <li>意图识别 Accuracy/F1</li>
+                        <li>LLM-as-Judge 四维评分</li>
+                        <li>多轮对话评测</li>
+                        <li>回归检测（基线对比）</li>
+                        <li>自动优化建议</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 对话演示面板 -->
+        <div class="panel" id="chat">
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message assistant">
+                        <div class="message-content">
+                            你好！我是 SeaCost AI 助手，专注于海鲜酒楼的成本管控。我可以帮您处理采购报货、验收入库、库存管理、成本核算等问题。请问有什么可以帮您的？
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="输入您的问题，例如：今天需要报货龙虾50斤" />
+                    <button id="sendBtn" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 实时监控面板 -->
+        <div class="panel" id="monitor">
+            <div class="monitor-grid">
+                <div class="monitor-card">
+                    <h4>总请求数</h4>
+                    <div class="value" id="totalRequests">-</div>
+                    <div class="label">累计处理</div>
+                </div>
+                <div class="monitor-card">
+                    <h4>平均延迟</h4>
+                    <div class="value" id="avgLatency">-</div>
+                    <div class="label">毫秒</div>
+                </div>
+                <div class="monitor-card">
+                    <h4>成功率</h4>
+                    <div class="value" id="successRate">-</div>
+                    <div class="label">系统整体</div>
+                </div>
+                <div class="monitor-card">
+                    <h4>活跃告警</h4>
+                    <div class="value" id="activeAlerts">-</div>
+                    <div class="label">当前</div>
+                </div>
+            </div>
+            <div class="agent-stats">
+                <h3>Agent 性能统计</h3>
+                <div id="agentStats">
+                    <div class="loading">加载中</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 知识库面板 -->
+        <div class="panel" id="knowledge">
+            <div class="knowledge-section">
+                <h3>知识库统计</h3>
+                <div class="knowledge-stats">
+                    <div class="stat-card">
+                        <div class="value" id="docCount">-</div>
+                        <div class="label">文档片段总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value" id="skillsCount">-</div>
+                        <div class="label">已加载 Skills</div>
+                    </div>
+                </div>
+            </div>
+            <div class="knowledge-section">
+                <h3>上传文档</h3>
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <p>点击上传文档（支持 .txt, .md, .json）</p>
+                    <input type="file" id="fileInput" style="display: none;" accept=".txt,.md,.json" onchange="uploadFile(this)" />
+                </div>
+            </div>
+            <div class="knowledge-section">
+                <h3>Skills 列表</h3>
+                <div id="skillsList">
+                    <div class="loading">加载中</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 评测面板 -->
+        <div class="panel" id="eval">
+            <div class="eval-results">
+                <div class="eval-header">
+                    <h3>端到端评测</h3>
+                    <button class="eval-btn" id="runEvalBtn" onclick="runEvaluation()">运行评测</button>
+                </div>
+                <div id="evalContent">
+                    <p style="text-align: center; color: #666; padding: 40px;">点击"运行评测"按钮开始测试</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab 切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.panel).classList.add('active');
+
+                // 加载对应数据
+                if (tab.dataset.panel === 'monitor') loadMonitor();
+                if (tab.dataset.panel === 'knowledge') loadKnowledge();
+            });
+        });
+
+        // 对话功能
+        let convId = null;
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            input.value = '';
+
+            // 添加用户消息
+            addMessage('user', message);
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: 'demo_user',
+                        conv_id: convId
+                    })
+                });
+
+                const data = await response.json();
+                convId = data.conv_id;
+
+                // 添加助手回复
+                const meta = `意图: ${data.intent} | Agent: ${data.agent_type} | 延迟: ${data.latency_ms.toFixed(0)}ms`;
+                addMessage('assistant', data.response, meta);
+            } catch (error) {
+                addMessage('assistant', '抱歉，服务暂时不可用，请稍后重试。');
+            }
+
+            btn.disabled = false;
+            input.focus();
+        }
+
+        function addMessage(role, content, meta = '') {
+            const messages = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.innerHTML = `
+                <div class="message-content">
+                    ${content}
+                    ${meta ? `<div class="message-meta">${meta}</div>` : ''}
+                </div>
+            `;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Enter 键发送
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // 监控数据
+        async function loadMonitor() {
+            try {
+                const response = await fetch('/monitor');
+                const data = await response.json();
+
+                // 更新统计卡片
+                let totalRequests = 0;
+                let totalLatency = 0;
+                let totalSuccess = 0;
+
+                if (data.agent_stats) {
+                    Object.values(data.agent_stats).forEach(stats => {
+                        totalRequests += stats.total || 0;
+                        totalLatency += (stats.avg_ms || 0) * (stats.total || 0);
+                        totalSuccess += (stats.success_rate || 0) * (stats.total || 0);
+                    });
+                }
+
+                document.getElementById('totalRequests').textContent = totalRequests;
+                document.getElementById('avgLatency').textContent = totalRequests > 0 ? (totalLatency / totalRequests).toFixed(0) : '0';
+                document.getElementById('successRate').textContent = totalRequests > 0 ? ((totalSuccess / totalRequests) * 100).toFixed(1) + '%' : '100%';
+                document.getElementById('activeAlerts').textContent = (data.active_alerts || []).length;
+
+                // 更新 Agent 统计
+                const agentStats = document.getElementById('agentStats');
+                if (data.agent_stats && Object.keys(data.agent_stats).length > 0) {
+                    agentStats.innerHTML = Object.entries(data.agent_stats).map(([name, stats]) => `
+                        <div class="agent-row">
+                            <div class="agent-name">${name}</div>
+                            <div class="agent-metrics">
+                                <div class="metric">
+                                    <div class="metric-value">${stats.total || 0}</div>
+                                    <div class="metric-label">请求数</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value">${((stats.success_rate || 0) * 100).toFixed(1)}%</div>
+                                    <div class="metric-label">成功率</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value">${(stats.avg_ms || 0).toFixed(0)}</div>
+                                    <div class="metric-label">延迟(ms)</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value">${(stats.routing_score || 0).toFixed(2)}</div>
+                                    <div class="metric-label">路由分</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    agentStats.innerHTML = '<p style="text-align: center; color: #666;">暂无数据</p>';
+                }
+            } catch (error) {
+                console.error('加载监控数据失败:', error);
+            }
+        }
+
+        // 知识库数据
+        async function loadKnowledge() {
+            try {
+                // 加载知识库统计
+                const kbResponse = await fetch('/knowledge/stats');
+                const kbData = await kbResponse.json();
+                document.getElementById('docCount').textContent = kbData.total_chunks || 0;
+
+                // 加载 Skills
+                const skillsResponse = await fetch('/skills');
+                const skillsData = await skillsResponse.json();
+                document.getElementById('skillsCount').textContent = skillsData.total || 0;
+
+                const skillsList = document.getElementById('skillsList');
+                if (skillsData.skills && skillsData.skills.length > 0) {
+                    skillsList.innerHTML = skillsData.skills.map(skill => `
+                        <div class="agent-row">
+                            <div>
+                                <div class="agent-name">${skill.name}</div>
+                                <div style="font-size: 0.85em; color: #666; margin-top: 5px;">${skill.description || ''}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.85em;">Agents: ${skill.agents.join(', ')}</div>
+                                <div style="font-size: 0.85em; color: ${skill.enabled ? '#4CAF50' : '#999'};">${skill.enabled ? '已启用' : '已禁用'}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    skillsList.innerHTML = '<p style="text-align: center; color: #666;">暂无 Skills</p>';
+                }
+            } catch (error) {
+                console.error('加载知识库数据失败:', error);
+            }
+        }
+
+        // 文件上传
+        async function uploadFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/knowledge/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                alert(`${data.message}\n新增 ${data.added_chunks} 个文档片段`);
+                loadKnowledge();
+            } catch (error) {
+                alert('上传失败: ' + error.message);
+            }
+
+            input.value = '';
+        }
+
+        // 评测
+        async function runEvaluation() {
+            const btn = document.getElementById('runEvalBtn');
+            const content = document.getElementById('evalContent');
+
+            btn.disabled = true;
+            content.innerHTML = '<div class="loading">评测运行中</div>';
+
+            try {
+                const response = await fetch('/eval/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+
+                content.innerHTML = `
+                    <div class="eval-metrics">
+                        <div class="eval-metric">
+                            <div class="value">${(data.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="label">通过率</div>
+                        </div>
+                        <div class="eval-metric">
+                            <div class="value">${data.passed}/${data.total}</div>
+                            <div class="label">通过/总数</div>
+                        </div>
+                        <div class="eval-metric">
+                            <div class="value">${data.avg_scores.intent_accuracy ? (data.avg_scores.intent_accuracy * 100).toFixed(1) + '%' : '-'}</div>
+                            <div class="label">意图准确率</div>
+                        </div>
+                        <div class="eval-metric">
+                            <div class="value">${data.avg_scores.relevance ? (data.avg_scores.relevance * 100).toFixed(1) + '%' : '-'}</div>
+                            <div class="label">相关性</div>
+                        </div>
+                        <div class="eval-metric">
+                            <div class="value">${data.avg_scores.accuracy ? (data.avg_scores.accuracy * 100).toFixed(1) + '%' : '-'}</div>
+                            <div class="label">准确性</div>
+                        </div>
+                        <div class="eval-metric">
+                            <div class="value">${data.avg_scores.completeness ? (data.avg_scores.completeness * 100).toFixed(1) + '%' : '-'}</div>
+                            <div class="label">完整性</div>
+                        </div>
+                    </div>
+                    <div class="eval-progress">
+                        <div class="eval-progress-bar" style="width: ${data.pass_rate * 100}%"></div>
+                    </div>
+                    ${data.regressions.length > 0 ? `
+                        <h4 style="margin-top: 20px; color: #f44336;">回归项</h4>
+                        <ul style="margin-top: 10px;">
+                            ${data.regressions.map(r => `<li style="color: #f44336;">${r}</li>`).join('')}
+                        </ul>
+                    ` : ''}
+                    ${data.recommendations.length > 0 ? `
+                        <h4 style="margin-top: 20px;">优化建议</h4>
+                        <ul style="margin-top: 10px;">
+                            ${data.recommendations.map(r => `<li>${r}</li>`).join('')}
+                        </ul>
+                    ` : ''}
+                `;
+            } catch (error) {
+                content.innerHTML = '<p style="color: #f44336; text-align: center;">评测运行失败: ' + error.message + '</p>';
+            }
+
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>
