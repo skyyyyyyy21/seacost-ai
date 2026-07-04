@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 import chromadb
 import redis
 from anthropic import AsyncAnthropic
+from core.llm_client import call_llm_streaming, call_llm_sync
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +92,9 @@ class MemoryManager:
         base_url:     Optional[str] = None,
         model:        str = "claude-3-5-sonnet-20241022",
     ):
-        kwargs: Dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        self._client = AsyncAnthropic(**kwargs)
-        self._model  = model
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
 
         self._redis = redis.from_url(redis_url, decode_responses=True)
 
@@ -183,11 +182,14 @@ class MemoryManager:
         prompt = self._safe_text(prompt)
 
         try:
-            resp = await self._client.messages.create(
-                model=self._model, max_tokens=512, temperature=0.0,
+            raw = await call_llm_streaming(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
                 messages=[{"role": "user", "content": prompt}],
+                max_tokens=512,
+                temperature=0.0,
             )
-            raw = resp.content[0].text
             s, e = raw.find("{"), raw.rfind("}") + 1
             profile_data = json.loads(raw[s:e])
 
@@ -262,11 +264,14 @@ class MemoryManager:
         text = self._safe_text("\n".join(f"{m.role.value}: {m.content}" for m in to_compress))
         prompt = self._safe_text(f"用 2-3 句话总结以下对话的关键信息：\n{text}")
         try:
-            resp = await self._client.messages.create(
-                model=self._model, max_tokens=256, temperature=0.0,
+            summary = self._safe_text(await call_llm_streaming(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
                 messages=[{"role": "user", "content": prompt}],
-            )
-            summary = self._safe_text(resp.content[0].text).strip()
+                max_tokens=256,
+                temperature=0.0,
+            )).strip()
         except Exception:
             summary = f"对话包含 {len(to_compress)} 条消息（摘要生成失败）"
 

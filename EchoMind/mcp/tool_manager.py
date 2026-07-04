@@ -22,6 +22,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
+from core.llm_client import call_llm_streaming
 
 logger = logging.getLogger(__name__)
 
@@ -132,11 +133,9 @@ class MCPToolManager:
     """
 
     def __init__(self, api_key: str, base_url: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022"):
-        kwargs: Dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        self._client = AsyncAnthropic(**kwargs)
-        self._model  = model
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
         self._tools: Dict[str, Tool] = {}
         self._cache: Dict[str, tuple] = {}   # key → (result, expire_at)
 
@@ -265,11 +264,14 @@ class MCPToolManager:
 返回 JSON 数组，例如: ["子查询1", "子查询2", "子查询3"]"""
         prompt = self._clean_text(prompt)
         try:
-            resp = await self._client.messages.create(
-                model=self._model, max_tokens=256, temperature=0.3,
+            raw = await call_llm_streaming(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
                 messages=[{"role": "user", "content": prompt}],
+                max_tokens=256,
+                temperature=0.3,
             )
-            raw = resp.content[0].text
             s, e = raw.find("["), raw.rfind("]") + 1
             queries = json.loads(raw[s:e])
             # 原始查询也保留，去重
@@ -344,11 +346,14 @@ class MCPToolManager:
         prompt = self._clean_text(prompt)
 
         try:
-            resp = await self._client.messages.create(
-                model=self._model, max_tokens=256, temperature=0.0,
+            raw = await call_llm_streaming(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                model=self._model,
                 messages=[{"role": "user", "content": prompt}],
+                max_tokens=256,
+                temperature=0.0,
             )
-            raw = resp.content[0].text
             s, e = raw.find("["), raw.rfind("]") + 1
             order: List[int] = json.loads(raw[s:e])
             reranked = [items[i] for i in order if 0 <= i < len(items)]
