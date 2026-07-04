@@ -1,0 +1,16 @@
+[project]
+sub_id = "7aab5543"
+name = "EchoMind"
+requires = ["python-3.12"]
+project_type = ""
+
+[preview]
+preview_enable = "disabled"
+
+[deploy]
+build = ["bash", "scripts/setup.sh"]
+run = ["bash", "scripts/http_run.sh", "-p", "5000"]
+
+[deploy.profile]
+kind = "service"
+flavor = "web"

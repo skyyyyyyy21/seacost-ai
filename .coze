@@ -1,0 +1,17 @@
+[project]
+requires = ["python-3.12"]
+project_type = ""
+
+[preview]
+preview_enable = "disabled"
+
+[deploy]
+build = ["bash", "EchoMind/scripts/setup.sh"]
+run = ["bash", "EchoMind/scripts/http_run.sh", "-p", "5000"]
+
+[deploy.profile]
+kind = "service"
+flavor = "web"
+
+[subprojects]
+path = ["EchoMind"]
