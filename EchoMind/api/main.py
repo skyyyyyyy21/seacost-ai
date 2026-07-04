@@ -52,7 +52,9 @@ _evaluator    = None
 
 
 def _anthropic_cfg() -> Dict[str, Any]:
-    key = os.getenv("ANTHROPIC_API_KEY", "")
+    # 默认 API Key（用于演示，生产环境请通过环境变量覆盖）
+    default_key = "sk-83df2051487d4a1488793fbe13891de9"
+    key = os.getenv("ANTHROPIC_API_KEY", "").strip() or default_key
     cfg: Dict[str, Any] = {
         "api_key":  key,
         "model":    os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
@@ -60,6 +62,9 @@ def _anthropic_cfg() -> Dict[str, Any]:
     base_url = os.getenv("ANTHROPIC_BASE_URL", "").strip()
     if base_url:
         cfg["base_url"] = base_url
+    else:
+        # 默认使用 DeepSeek
+        cfg["base_url"] = "https://api.deepseek.com"
     # 如果没有 API Key，返回 None 表示降级模式
     if not key:
         return None
