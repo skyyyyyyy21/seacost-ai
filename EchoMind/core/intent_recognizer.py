@@ -24,16 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 class IntentCategory(Enum):
-    QUERY      = "query"       # 查询信息
-    COMPLAINT  = "complaint"   # 投诉不满
-    REQUEST    = "request"     # 请求操作
-    GREETING   = "greeting"    # 问候
-    ESCALATION = "escalation"  # 要求升级/转人工
-    TECHNICAL  = "technical"   # 技术问题
-    BILLING    = "billing"     # 账单/退款
-    ACCOUNT    = "account"     # 账户管理
-    FEEDBACK   = "feedback"    # 正面反馈
-    OTHER      = "other"
+    PURCHASE     = "purchase"      # 采购报货
+    INSPECTION   = "inspection"    # 验收入库
+    INVENTORY    = "inventory"     # 库存管理
+    COST         = "cost"          # 成本核算
+    QUERY        = "query"         # 查询信息
+    COMPLAINT    = "complaint"     # 投诉不满
+    ESCALATION   = "escalation"    # 要求升级/转人工
+    GREETING     = "greeting"      # 问候
+    OTHER        = "other"
 
 
 class UrgencyLevel(Enum):
