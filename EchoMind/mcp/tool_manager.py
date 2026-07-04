@@ -22,7 +22,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
-from core.llm_client import call_llm_streaming
+from core.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,7 @@ class MCPToolManager:
 返回 JSON 数组，例如: ["子查询1", "子查询2", "子查询3"]"""
         prompt = self._clean_text(prompt)
         try:
-            raw = await call_llm_streaming(
+            raw = await chat_completion(
                 api_key=self._api_key,
                 base_url=self._base_url,
                 model=self._model,
@@ -346,7 +346,7 @@ class MCPToolManager:
         prompt = self._clean_text(prompt)
 
         try:
-            raw = await call_llm_streaming(
+            raw = await chat_completion(
                 api_key=self._api_key,
                 base_url=self._base_url,
                 model=self._model,

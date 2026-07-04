@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 import chromadb
 import redis
 from anthropic import AsyncAnthropic
-from core.llm_client import call_llm_streaming, call_llm_sync
+from core.llm_client import chat_completion, call_llm_sync
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ class MemoryManager:
         prompt = self._safe_text(prompt)
 
         try:
-            raw = await call_llm_streaming(
+            raw = await chat_completion(
                 api_key=self._api_key,
                 base_url=self._base_url,
                 model=self._model,
@@ -264,7 +264,7 @@ class MemoryManager:
         text = self._safe_text("\n".join(f"{m.role.value}: {m.content}" for m in to_compress))
         prompt = self._safe_text(f"用 2-3 句话总结以下对话的关键信息：\n{text}")
         try:
-            summary = self._safe_text(await call_llm_streaming(
+            summary = self._safe_text(await chat_completion(
                 api_key=self._api_key,
                 base_url=self._base_url,
                 model=self._model,
