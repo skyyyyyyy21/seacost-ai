@@ -37,30 +37,39 @@ class KnowledgeBase:
         chroma_port: int = 8000,
         chroma_path: str = "./data/chroma",
     ):
-        # 优先连接独立 ChromaDB 服务（服务端内置 embedding 模型，客户端无需下载）
         self._use_server = False
+        self._memory_mode = False  # 纯内存降级模式
+        self._memory_docs = []  # 内存模式下的文档存储
+
+        # 优先连接独立 ChromaDB 服务
         try:
             self._client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
             self._client.heartbeat()
             self._use_server = True
             logger.info(f"知识库 ChromaDB 已连接: {chroma_host}:{chroma_port}")
-        except Exception:
-            logger.info(f"知识库 ChromaDB 服务不可用，使用本地模式: {chroma_path}")
-            self._client = chromadb.PersistentClient(
-                path=chroma_path,
-                settings=chromadb.Settings(anonymized_telemetry=False),
+        except Exception as e:
+            logger.info(f"知识库 ChromaDB 服务不可用 ({e})，尝试本地模式: {chroma_path}")
+            try:
+                self._client = chromadb.PersistentClient(
+                    path=chroma_path,
+                    settings=chromadb.Settings(anonymized_telemetry=False),
+                )
+            except Exception as e2:
+                logger.warning(f"知识库 ChromaDB 本地模式也不可用 ({e2})，使用纯内存模式")
+                self._client = None
+                self._memory_mode = True
+
+        if self._client:
+            self._collection = self._client.get_or_create_collection(
+                name=self.COLLECTION_NAME,
+                metadata={"description": "SeaCost AI RAG 知识库"},
             )
-
-        # 使用服务端时不传 embedding_function，让服务端处理
-        # 本地模式时也不传，使用 ChromaDB 默认的（会触发模型下载）
-        self._collection = self._client.get_or_create_collection(
-            name=self.COLLECTION_NAME,
-            metadata={"description": "EchoMind RAG 知识库"},
-        )
-
-        # 如果知识库为空，导入默认文档
-        if self._collection.count() == 0:
-            self._load_default_docs()
+            # 如果知识库为空，导入默认文档
+            if self._collection.count() == 0:
+                self._load_default_docs()
+        else:
+            # 纯内存模式，加载默认文档到内存
+            self._load_default_docs_to_memory()
 
     # ── 文档管理 ──────────────────────────────────────────────────────────────
 
@@ -94,9 +103,12 @@ class KnowledgeBase:
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """
         语义检索：根据 query 返回最相关的文档片段。
-
-        ChromaDB 内部自动将 query 转为向量，与存储的文档向量做余弦相似度匹配。
+        内存模式下使用简单的关键词匹配。
         """
+        # 内存模式：简单关键词匹配
+        if self._memory_mode:
+            return self._memory_search(query, top_k)
+
         results = self._collection.query(
             query_texts=[query],
             n_results=top_k,
@@ -112,14 +124,45 @@ class KnowledgeBase:
                 items.append({
                     "title":    meta.get("title", ""),
                     "content":  doc,
-                    "score":    round(1.0 - dist, 4),  # ChromaDB 返回距离，转为相似度
+                    "score":    round(1.0 - dist, 4),
                     "chunk":    meta.get("chunk_index", 0),
                 })
 
         return items
 
+    def _memory_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """内存模式下的简单关键词匹配搜索"""
+        query_lower = query.lower()
+        scored = []
+        for doc in self._memory_docs:
+            content_lower = doc["content"].lower()
+            # 简单评分：匹配的关键词数量
+            score = sum(1 for word in query_lower.split() if word in content_lower)
+            if score > 0:
+                scored.append({
+                    "title": doc["title"],
+                    "content": doc["content"],
+                    "score": round(score / max(len(query_lower.split()), 1), 4),
+                    "chunk": 0,
+                })
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:top_k]
+
+    def _load_default_docs_to_memory(self):
+        """内存模式下加载默认文档"""
+        default_docs = [
+            {"title": "智能采购报货流程", "content": "系统基于近7-30天销量、天气、节假日、海鲜潮汐规律自动生成报货建议。店长手机端一键调整后通过EDI直连供应商。系统自动记录历史采购价，异常涨价实时预警，支持多供应商比价下单。"},
+            {"title": "标准化验收入库流程", "content": "海鲜专用防水电子秤直连系统，称重数据自动同步，无需手工录入。验收时拍照留证，记录海鲜鲜活度、产地、批次。重量偏差超阈值（如±5%）自动触发总部审核。不合格品一键发起退货，流程留痕可追溯。"},
+            {"title": "精细化库存管理", "content": "分批次库存管理，系统强制提醒先进先出。设置食材保质期预警，临期前3天自动推送优先使用提醒。支持分档口（海鲜区、火锅区、后厨）快速盘点，系统自动生成盘点差异表。报损、调拨流程化，每一笔损耗都有记录和原因分析。"},
+            {"title": "自动成本核算", "content": "系统自动抓取采购价、称重数据、加工费、调料成本，实时核算每道菜品的成本与毛利。自动生成成本分析报告，定位异常损耗点（如某类海鲜报损率过高）。支持按海鲜、火锅、酒水等品类单独核算成本与利润。"},
+        ]
+        self._memory_docs = default_docs
+        logger.info(f"内存模式加载 {len(default_docs)} 个默认文档")
+
     @property
     def doc_count(self) -> int:
+        if self._memory_mode:
+            return len(self._memory_docs)
         return self._collection.count()
 
     # ── MCP 工具 handler ─────────────────────────────────────────────────────
