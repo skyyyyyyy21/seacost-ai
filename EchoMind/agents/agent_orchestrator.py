@@ -23,8 +23,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from anthropic import AsyncAnthropic
-
 from core.intent_recognizer import IntentCategory, IntentRecognizer, UrgencyLevel
 
 logger = logging.getLogger(__name__)
@@ -103,9 +101,7 @@ class BaseAgent:
     agent_type: AgentType
     system_prompt: str
 
-    def __init__(self, client: AsyncAnthropic, model: str):
-        self._client = client
-        self._model  = model
+    def __init__(self):
         self.stats   = AgentStats()
         self._skill_manager = None  # 由 Orchestrator 注入
 
@@ -146,25 +142,25 @@ class BaseAgent:
         return base_prompt
 
     async def _call_llm(self, req: Request) -> str:
+        from core.llm_client import chat_completion, is_llm_available
+        
+        if not is_llm_available():
+            return "抱歉，AI 服务暂时不可用。"
+        
         def _clean(s: str) -> str:
             return s.encode("utf-8", errors="ignore").decode("utf-8")
 
         messages = []
+        # 构建 system prompt（含动态 Skills 注入）
+        system = self._build_system_prompt(req.message)
+        messages.append({"role": "system", "content": system})
+        
         if req.context:
             messages.append({"role": "user", "content": f"[背景信息]\n{_clean(req.context)}"})
             messages.append({"role": "assistant", "content": "好的，我已了解背景信息。"})
         messages.append({"role": "user", "content": _clean(req.message)})
 
-        # 构建 system prompt（含动态 Skills 注入）
-        system = self._build_system_prompt(req.message)
-
-        resp = await self._client.messages.create(
-            model=self._model,
-            max_tokens=1024,
-            system=system,
-            messages=messages,
-        )
-        return resp.content[0].text
+        return await chat_completion(messages, temperature=0.3, max_tokens=1024)
 
     def _needs_escalation(self, content: str) -> bool:
         """检测 Agent 是否建议升级（简单关键词检测）。"""
@@ -228,18 +224,8 @@ class AgentOrchestrator:
         # 其余意图 → GENERAL（默认）
     }
 
-    def __init__(
-        self,
-        api_key:  str,
-        base_url: Optional[str] = None,
-        model:    str = "claude-3-5-sonnet-20241022",
-    ):
-        kwargs: Dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        client = AsyncAnthropic(**kwargs)
-
-        self._intent_recognizer = IntentRecognizer(api_key=api_key, base_url=base_url, model=model)
+    def __init__(self):
+        self._intent_recognizer = IntentRecognizer()
 
         # 加载 Skills 管理器
         from core.skill_loader import SkillManager
@@ -247,10 +233,10 @@ class AgentOrchestrator:
 
         # Agent 池：每种类型可有多个实例（水平扩展）
         self._pool: Dict[AgentType, List[BaseAgent]] = {
-            AgentType.GENERAL:   [GeneralAgent(client, model)],
-            AgentType.PURCHASE:  [PurchaseAgent(client, model)],
-            AgentType.INVENTORY: [InventoryAgent(client, model)],
-            AgentType.COST:      [CostAgent(client, model)],
+            AgentType.GENERAL:   [GeneralAgent()],
+            AgentType.PURCHASE:  [PurchaseAgent()],
+            AgentType.INVENTORY: [InventoryAgent()],
+            AgentType.COST:      [CostAgent()],
         }
 
         # 为所有 Agent 注入 SkillManager
