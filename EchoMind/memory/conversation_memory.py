@@ -96,7 +96,16 @@ class MemoryManager:
         self._base_url = base_url
         self._model = model
 
-        self._redis = redis.from_url(redis_url, decode_responses=True)
+        # Redis：连接失败则使用纯内存模式
+        self._redis = None
+        self._memory_store: Dict[str, List[Dict]] = {}  # 纯内存备份
+        try:
+            self._redis = redis.from_url(redis_url, decode_responses=True)
+            self._redis.ping()  # 测试连接
+            logger.info(f"Redis 已连接: {redis_url}")
+        except Exception as e:
+            logger.warning(f"Redis 不可用 ({e})，使用纯内存模式（重启后数据丢失）")
+            self._redis = None
 
         # ChromaDB：优先连接独立服务（docker compose 模式），连不上则降级为本地嵌入式，再失败则纯内存模式
         self._chroma = None
