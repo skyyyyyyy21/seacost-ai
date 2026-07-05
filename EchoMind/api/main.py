@@ -106,7 +106,11 @@ async def lifespan(app: FastAPI):
     )
 
     # MCP 工具管理器 + RAG 知识库（基于 ChromaDB 的真实检索）
-    _tool_manager = MCPToolManager()
+    _tool_manager = MCPToolManager(
+        api_key=os.getenv("ANTHROPIC_API_KEY", "sk-83df2051487d4a1488793fbe13891de9"),
+        base_url=os.getenv("ANTHROPIC_BASE_URL"),
+        model=os.getenv("ANTHROPIC_MODEL", "deepseek-chat"),
+    )
     kb = KnowledgeBase(
         chroma_host=os.getenv("CHROMA_HOST", "chromadb"),
         chroma_port=int(os.getenv("CHROMA_PORT", "8000")),
