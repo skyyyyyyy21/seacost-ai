@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 import chromadb
 import redis
 from anthropic import AsyncAnthropic
-from core.llm_client import chat_completion, call_llm_sync
+from core.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)
 
