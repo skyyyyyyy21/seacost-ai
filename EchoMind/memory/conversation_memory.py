@@ -156,18 +156,28 @@ class MemoryManager:
         msg = Message(role=role, content=self._safe_text(content), metadata=clean_metadata)
         key = self._wm_key(user_id, conv_id)
 
-        # 追加到 Redis 列表（左推，最新在前）
-        self._redis.lpush(key, json.dumps({
+        msg_data = {
             "role":      msg.role.value,
             "content":   msg.content,
             "ts":        msg.timestamp.isoformat(),
             "metadata":  msg.metadata,
-        }))
-        self._redis.expire(key, 86400)  # 24h TTL
+        }
 
-        # 超过压缩阈值时触发压缩
-        if self._redis.llen(key) >= self.COMPRESS_AT:
-            await self._compress(user_id, conv_id)
+        if self._redis is not None:
+            # 追加到 Redis 列表（左推，最新在前）
+            self._redis.lpush(key, json.dumps(msg_data))
+            self._redis.expire(key, 86400)  # 24h TTL
+
+            # 超过压缩阈值时触发压缩
+            if self._redis.llen(key) >= self.COMPRESS_AT:
+                await self._compress(user_id, conv_id)
+        else:
+            # 降级模式：使用内存存储
+            if key not in self._memory_cache:
+                self._memory_cache[key] = []
+            self._memory_cache[key].insert(0, msg_data)
+            # 保留最近的消息
+            self._memory_cache[key] = self._memory_cache[key][:self.COMPRESS_AT]
 
     async def update_profile(self, user_id: str, conv_id: str) -> None:
         """
@@ -308,17 +318,31 @@ class MemoryManager:
 
     async def _get_working_memory(self, user_id: str, conv_id: str) -> List[Message]:
         key  = self._wm_key(user_id, conv_id)
-        raws = self._redis.lrange(key, 0, self.WORKING_MAX - 1)
-        msgs = []
-        for raw in reversed(raws):  # Redis lpush 最新在前，reversed 还原时序
-            d = json.loads(raw)
-            msgs.append(Message(
-                role=MsgRole(d["role"]),
-                content=d["content"],
-                timestamp=datetime.fromisoformat(d["ts"]),
-                metadata=d.get("metadata", {}),
-            ))
-        return msgs
+        
+        if self._redis is not None:
+            raws = self._redis.lrange(key, 0, self.WORKING_MAX - 1)
+            msgs = []
+            for raw in reversed(raws):  # Redis lpush 最新在前，reversed 还原时序
+                d = json.loads(raw)
+                msgs.append(Message(
+                    role=MsgRole(d["role"]),
+                    content=d["content"],
+                    timestamp=datetime.fromisoformat(d["ts"]),
+                    metadata=d.get("metadata", {}),
+                ))
+            return msgs
+        else:
+            # 降级模式：从内存缓存读取
+            cached = self._memory_cache.get(key, [])
+            msgs = []
+            for d in reversed(cached):
+                msgs.append(Message(
+                    role=MsgRole(d["role"]),
+                    content=d["content"],
+                    timestamp=datetime.fromisoformat(d["ts"]),
+                    metadata=d.get("metadata", {}),
+                ))
+            return msgs
 
     async def _search_episodic(self, user_id: str, query: str) -> List[str]:
         """语义检索情景记忆。ChromaDB 内置 embedding，不依赖外部 API。"""
