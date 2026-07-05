@@ -160,9 +160,6 @@ async def lifespan(app: FastAPI):
     _evaluator = EndToEndEvaluator(
         orchestrator=_orchestrator,
         recognizer=recognizer,
-        api_key=cfg["api_key"],
-        base_url=cfg.get("base_url"),
-        model=cfg["model"],
         baseline_path=os.getenv("EVAL_BASELINE_PATH", "/app/data/eval/baseline.json"),
     )
 

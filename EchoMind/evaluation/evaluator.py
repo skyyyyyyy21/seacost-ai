@@ -23,9 +23,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from anthropic import AsyncAnthropic
-
 from core.intent_recognizer import IntentCategory, IntentRecognizer
+from core.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +103,8 @@ Agent 响应: {response}
 
 只返回 JSON，例如: {{"relevance": 0.9, "accuracy": 0.8, "completeness": 0.7, "helpfulness": 0.85}}"""
 
-    def __init__(self, client: AsyncAnthropic, model: str):
-        self._client = client
-        self._model  = model
+    def __init__(self):
+        pass
 
     async def judge(
         self,
@@ -122,11 +120,7 @@ Agent 响应: {response}
         )
         prompt = self._clean_text(prompt)
         try:
-            resp = await self._client.messages.create(
-                model=self._model, max_tokens=256, temperature=0.0,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = resp.content[0].text
+            raw = await chat_completion(prompt, max_tokens=256, temperature=0.0)
             s, e = raw.find("{"), raw.rfind("}") + 1
             data = json.loads(raw[s:e])
             return QualityScores(
@@ -226,18 +220,10 @@ class EndToEndEvaluator:
         self,
         orchestrator,
         recognizer: IntentRecognizer,
-        api_key:  str,
-        base_url: Optional[str] = None,
-        model:    str = "claude-3-5-sonnet-20241022",
         baseline_path: Optional[str] = None,
     ):
-        kwargs: Dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        client = AsyncAnthropic(**kwargs)
-
         self._orchestrator     = orchestrator
-        self._judge            = LLMJudge(client, model)
+        self._judge            = LLMJudge()
         self._intent_evaluator = IntentEvaluator(recognizer)
         self._history:         List[EvalReport] = []
         self._baseline_path = pathlib.Path(baseline_path) if baseline_path else None
