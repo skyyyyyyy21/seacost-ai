@@ -253,7 +253,12 @@ class MemoryManager:
         profile = await self._get_profile(user_id)
 
         # 4. 会话摘要（如果已压缩过）
-        summary = self._redis.get(self._summary_key(user_id, conv_id)) or ""
+        summary = ""
+        if self._redis is not None:
+            try:
+                summary = self._redis.get(self._summary_key(user_id, conv_id)) or ""
+            except Exception:
+                summary = ""
 
         return MemoryContext(
             recent_messages=recent,
