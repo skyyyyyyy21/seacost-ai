@@ -92,7 +92,7 @@ class IntentRecognizer:
     ):
         self.threshold = confidence_threshold
         # 使用本地字符 n-gram 向量作为轻量兜底
-        self._embedding_enabled = not bool(base_url)
+        self._embedding_enabled = True
 
         self._tpl_embeddings: Dict[IntentCategory, List[List[float]]] = {}
         self._cache: Dict[str, IntentResult] = {}
